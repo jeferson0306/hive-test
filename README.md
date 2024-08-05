@@ -47,10 +47,6 @@ Um arquivo de inicialização (`mongo-init.js`) é utilizado para popular o banc
 
 A integração com o AWS S3 é realizada para salvar arquivos JSON representando as tarefas.
 
-- **Credenciais Utilizadas**: 
-- aws.access.key=AKIAS7RZF7T7WVT6DPP6 
-- aws.secret.key=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
-
 ## Configuração do Docker
 
 ### Dockerfile
