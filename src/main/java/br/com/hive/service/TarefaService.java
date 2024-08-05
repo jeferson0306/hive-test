@@ -13,7 +13,9 @@ import reactor.core.scheduler.Schedulers;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+import java.io.IOException;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.UUID;
 
 import static java.nio.file.Files.writeString;
@@ -26,6 +28,7 @@ public class TarefaService {
     private final S3Client s3Client;
     private final ObjectMapper objectMapper;
     private final TarefaRepository taskRepository;
+    private final TarefaLambdaService tarefaLambdaService;
 
     public Flux<Tarefa> buscarTarefas() {
         log.info("iniciando a listagem de tarefas");
@@ -41,13 +44,12 @@ public class TarefaService {
         log.info("iniciando a criacao da tarefa {}", tarefa);
         return taskRepository.save(tarefa).publishOn(Schedulers.boundedElastic()).flatMap(tarefaSalvaNoBucket -> Mono.fromCallable(() -> {
             try {
-                final var json = objectMapper.writeValueAsString(tarefaSalvaNoBucket);
-                final var key = UUID.randomUUID() + ".json";
-                final var tempFile = Paths.get(System.getProperty("java.io.tmpdir"), key);
-                writeString(tempFile, json);
-                final var putObjectRequest = PutObjectRequest.builder().bucket("s3-hive-test").key(key).contentType("application/json").build();
-                s3Client.putObject(putObjectRequest, tempFile);
-                log.info("arquivo enviado para o bucket s3 da aws: {}", key);
+                getObjectMapper(tarefaSalvaNoBucket);
+                log.info("arquivo enviado para o bucket s3 da aws");
+                final var payload = new HashMap<String, Object>();
+                payload.put("tarefaId", tarefaSalvaNoBucket.id());
+                payload.put("tarefaNome", tarefaSalvaNoBucket.nome());
+                tarefaLambdaService.invokeLambdaFunction("hive-test-lambda", payload);
                 return tarefaSalvaNoBucket;
             } catch (Exception e) {
                 log.error("erro ao enviar para o bucket s3 da aws:", e);
@@ -62,13 +64,8 @@ public class TarefaService {
             final var updatedTask = new Tarefa(id, tarefa.nome(), tarefa.descricao(), tarefa.status(), tarefa.dataDeCriacao(), tarefa.dataDeAtualizacao());
             return taskRepository.save(updatedTask).publishOn(Schedulers.boundedElastic()).flatMap(savedTask -> Mono.fromCallable(() -> {
                 try {
-                    final var json = objectMapper.writeValueAsString(savedTask);
-                    final var key = UUID.randomUUID() + ".json";
-                    final var tempFile = Paths.get(System.getProperty("java.io.tmpdir"), key);
-                    writeString(tempFile, json);
-                    final var putObjectRequest = PutObjectRequest.builder().bucket("s3-hive-test").key(key).contentType("application/json").build();
-                    s3Client.putObject(putObjectRequest, tempFile);
-                    log.info("arquivo atualizado enviado para o bucket s3 da aws: {}", key);
+                    getObjectMapper(savedTask);
+                    log.info("arquivo atualizado enviado para o bucket s3 da aws");
                     return savedTask;
                 } catch (Exception e) {
                     log.error("erro ao enviar para o bucket s3 da aws:", e);
@@ -83,4 +80,12 @@ public class TarefaService {
         return taskRepository.findById(id).flatMap(existingTask -> taskRepository.deleteById(id).then(Mono.just("Tarefa deletada com sucesso"))).switchIfEmpty(Mono.error(new TarefaNaoEncontradaException("Tarefa não encontrada para o id: " + id))).doOnTerminate(() -> log.info("finalizando a exclusao da tarefa para o id {}", id));
     }
 
+    private void getObjectMapper(final Tarefa tarefaSalva) throws IOException {
+        final var json = objectMapper.writeValueAsString(tarefaSalva);
+        final var key = UUID.randomUUID() + ".json";
+        final var tempFile = Paths.get(System.getProperty("java.io.tmpdir"), key);
+        writeString(tempFile, json);
+        final var putObjectRequest = PutObjectRequest.builder().bucket("s3-hive-test").key(key).contentType("application/json").build();
+        s3Client.putObject(putObjectRequest, tempFile);
+    }
 }

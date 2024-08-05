@@ -63,6 +63,28 @@ ENTRYPOINT ["java","-jar","/app.jar"]
 ### Evidencia nos arquivos no Bucket S3 da AWS
 ![img.png](img.png)
 
+![img_1.png](img_1.png)
+
+### Política JSON para permissões de stream do DynamoDB:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:DescribeStream",
+                "dynamodb:ListStreams"
+            ],
+            "Resource": "arn:aws:dynamodb:us-east-1:205204618495:table/hive-test-table/stream/*"
+        }
+    ]
+}
+```
+
 ## Desenvolvido por Jeferson Siqueira
 
 - Github: https://github.com/jeferson0306
